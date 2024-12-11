@@ -5,42 +5,44 @@
     <style>
       :root {
         --pad: 1em;
-        color-scheme: light dark
+        color-scheme: light dark;
       }
 
-      * { box-sizing: border-box }
+      * {
+        box-sizing: border-box;
+      }
 
-      html, body, main {
+      html,
+      body,
+      main {
         width: 100%;
         height: 100%;
-        margin: 0
+        margin: 0;
       }
 
       body {
-        overflow: hidden
+        overflow: hidden;
       }
 
       main {
         display: flex;
-        height: 100%
+        height: 100%;
       }
 
       textarea {
-        width: 50%;
-        height: 100%;
         margin: 0;
+        flex: 1;
         padding: var(--pad);
         font-family: monospace;
         white-space: pre-wrap;
         outline: none;
         border: none;
-        resize: none
+        resize: none;
       }
 
       iframe {
-        width: 50%;
-        height: 100%;
-        border: none
+        flex: 1;
+        border: none;
       }
     </style>
   </head>
@@ -52,17 +54,17 @@
     <script>
       class Editor {
         constructor() {
-          this.dbName = 'uris'
-          this.storeName = 'uri'
+          this.dbName = "uris"
+          this.storeName = "uri"
           this.db = null
           this.saveTimeout = null
-          this.editor = document.querySelector('textarea')
-          this.preview = document.querySelector('iframe')
+          this.editor = document.querySelector("textarea")
+          this.preview = document.querySelector("iframe")
           this.hooks = {
             beforeSave: [],
             afterSave: [],
             beforeLoad: [],
-            afterLoad: []
+            afterLoad: [],
           }
 
           this.init()
@@ -71,13 +73,13 @@
         async init() {
           await this.initDB()
           this.bindEvents()
-          
+
           if (!location.hash) {
-            location.hash = 'home'
+            location.hash = "home"
           } else {
             await this.loadContent()
           }
-          
+
           this.editor.focus()
         }
 
@@ -86,47 +88,36 @@
             const request = indexedDB.open(this.dbName, 1)
             request.onupgradeneeded = (event) => {
               this.db = event.target.result
-              this.db.createObjectStore(this.storeName, { keyPath: 'key' })
+              this.db.createObjectStore(this.storeName, { keyPath: "key" })
             }
             request.onsuccess = (event) => {
               this.db = event.target.result
               resolve()
             }
             request.onerror = (event) => {
-              console.error('Database error:', event.target.errorCode)
+              console.error("Database error:", event.target.errorCode)
               reject(event.target.errorCode)
             }
           })
         }
 
         bindEvents() {
-          this.editor.addEventListener('input', () => {
+          this.editor.addEventListener("input", () => {
             clearTimeout(this.saveTimeout)
             this.saveTimeout = setTimeout(() => this.saveContent(), 1000)
-            this.updatePreview()
           })
 
-          window.addEventListener('hashchange', () => this.loadContent())
+          window.addEventListener("hashchange", () => this.loadContent())
         }
 
         updatePreview() {
           const doc = this.preview.contentDocument
           doc.open()
-          doc.write(this.editor.value)
+          doc.write(
+            "<style>:root {color-scheme: light dark; white-space: pre-wrap;} * {box-sizing: border-box;}</style>" +
+              this.editor.value
+          )
           doc.close()
-          this.executeScripts(doc)
-        }
-
-        executeScripts(doc) {
-          const scripts = doc.getElementsByTagName('script')
-          Array.from(scripts).forEach(oldScript => {
-            const newScript = doc.createElement('script')
-            Array.from(oldScript.attributes).forEach(attr => {
-              newScript.setAttribute(attr.name, attr.value)
-            })
-            newScript.textContent = oldScript.textContent
-            oldScript.parentNode.replaceChild(newScript, oldScript)
-          })
         }
 
         getDefaultContent() {
@@ -142,19 +133,19 @@ Usage:
         }
 
         async loadContent() {
-          const hash = location.hash.slice(1) || 'home'
-          
+          const hash = location.hash.slice(1) || "home"
+
           for (const hook of this.hooks.beforeLoad) {
             await hook(hash)
           }
 
-          if (hash === 'reset') {
+          if (hash === "reset") {
             await this.resetDB()
-            location.hash = 'home'
+            location.hash = "home"
             return
           }
 
-          if (hash === 'source') {
+          if (hash === "source") {
             const response = await fetch(location.pathname)
             const sourceCode = await response.text()
             this.editor.value = sourceCode
@@ -162,22 +153,22 @@ Usage:
             return
           }
 
-          const transaction = this.db.transaction([this.storeName], 'readonly')
+          const transaction = this.db.transaction([this.storeName], "readonly")
           const store = transaction.objectStore(this.storeName)
           const request = store.get(hash)
 
           request.onsuccess = async (event) => {
             const result = event.target.result
-            
-            if (!result && hash === 'home') {
+
+            if (!result && hash === "home") {
               this.editor.value = this.getDefaultContent()
               await this.saveContent()
             } else {
-              this.editor.value = result ? result.value : ''
+              this.editor.value = result ? result.value : ""
             }
-            
+
             this.updatePreview()
-            
+
             for (const hook of this.hooks.afterLoad) {
               await hook(hash)
             }
@@ -185,18 +176,18 @@ Usage:
         }
 
         async saveContent() {
-          const hash = location.hash.slice(1) || 'home'
-          if (['source', 'reset'].includes(hash)) return
+          const hash = location.hash.slice(1) || "home"
+          if (["source", "reset"].includes(hash)) return
 
           for (const hook of this.hooks.beforeSave) {
             await hook(hash, this.editor.value)
           }
 
-          const transaction = this.db.transaction([this.storeName], 'readwrite')
+          const transaction = this.db.transaction([this.storeName], "readwrite")
           const store = transaction.objectStore(this.storeName)
           await store.put({
             key: hash,
-            value: this.editor.value
+            value: this.editor.value,
           })
 
           for (const hook of this.hooks.afterSave) {
@@ -206,10 +197,10 @@ Usage:
 
         async resetDB() {
           const confirmReset = confirm(
-            'Are you sure you want to reset all data? This action cannot be undone.'
+            "Are you sure you want to reset all data? This action cannot be undone."
           )
           if (!confirmReset) {
-            location.hash = 'home'
+            location.hash = "home"
             return
           }
 
@@ -223,7 +214,7 @@ Usage:
         }
       }
 
-      new Editor
+      new Editor()
     </script>
   </body>
 </html>
