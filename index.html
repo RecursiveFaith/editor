@@ -1,104 +1,186 @@
 <!DOCTYPE html>
 <html>
-  <style>
-    :root {
-      --pad: 1em;
-    }
-    * {
-      box-sizing: border-box;
-    }
-    html,
-    body,
-    body > [contenteditable] {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: var(--pad);
-    }
-    [contenteditable] {
-      overflow: auto;
-    }
-  </style>
+  <head>
+    <title>Editor</title>
+    <style>
+      /* Core styles */
+      :root {
+        --pad: 1em;
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #000000;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1a1a1a;
+          --fg: #ffffff;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+      }
+
+      [contenteditable] {
+        width: 100%;
+        height: 100%;
+        padding: var(--pad);
+        overflow: auto;
+        outline: none;
+        font-family: system-ui, -apple-system, sans-serif;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
   <body>
-    <div contenteditable style="height: 100%; width: 100%"></div>
+    <div contenteditable></div>
     <script>
-      const dbName = "uris";
-      const storeName = "uri";
-      let db;
+      class Editor {
+        constructor() {
+          this.dbName = "uris";
+          this.storeName = "uri";
+          this.db = null;
+          this.saveTimeout = null;
+          this.contentEditable = document.querySelector("[contenteditable]");
 
-      // Initialize IndexedDB
-      const request = indexedDB.open(dbName, 1);
-      request.onupgradeneeded = function (event) {
-        db = event.target.result;
-        const objectStore = db.createObjectStore(storeName, { keyPath: "key" });
-      };
-      request.onsuccess = function (event) {
-        db = event.target.result;
-        if (!location.hash) {
-          location.hash = "home";
+          this.init();
+          this.bindEvents();
         }
-        loadContent();
-      };
-      request.onerror = function (event) {
-        console.error("Database error:", event.target.errorCode);
-      };
 
-      // Handle special cases and content loading
-      async function loadContent() {
-        const hash = location.hash.slice(1) || "home";
-        const contentEditable = document.querySelector("[contenteditable]");
-
-        // Special case: #reset
-        if (hash === "reset") {
-          const req = indexedDB.deleteDatabase(dbName);
-          req.onsuccess = () => {
+        async init() {
+          await this.initDB();
+          if (!location.hash) {
             location.hash = "home";
-            location.reload();
+          }
+          this.loadContent();
+        }
+
+        initDB() {
+          return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, 1);
+
+            request.onupgradeneeded = (event) => {
+              this.db = event.target.result;
+              this.db.createObjectStore(this.storeName, { keyPath: "key" });
+            };
+
+            request.onsuccess = (event) => {
+              this.db = event.target.result;
+              resolve();
+            };
+
+            request.onerror = (event) => {
+              console.error("Database error:", event.target.errorCode);
+              reject(event.target.errorCode);
+            };
+          });
+        }
+
+        bindEvents() {
+          this.contentEditable.addEventListener("input", () => {
+            clearTimeout(this.saveTimeout);
+            this.saveTimeout = setTimeout(() => this.saveContent(), 1000);
+          });
+
+          window.addEventListener("hashchange", () => this.loadContent());
+        }
+
+        async loadContent() {
+          const hash = location.hash.slice(1) || "home";
+
+          // Handle #reset
+          if (hash === "reset") {
+            await this.resetDB();
+            location.hash = "home";
+            return;
+          }
+
+          // Handle #source
+          if (hash === "source") {
+            const response = await fetch(location.pathname);
+            const sourceCode = await response.text();
+            this.contentEditable.textContent = sourceCode;
+            return;
+          }
+
+          // Handle #home when empty
+          if (hash === "home") {
+            const transaction = this.db.transaction(
+              [this.storeName],
+              "readonly"
+            );
+            const store = transaction.objectStore(this.storeName);
+            const request = store.get(hash);
+
+            request.onsuccess = async (event) => {
+              if (!event.target.result) {
+                try {
+                  const response = await fetch("README.md");
+                  const readme = await response.text();
+                  this.contentEditable.innerHTML = readme;
+                  this.saveContent(); // Save README as initial content
+                } catch (e) {
+                  console.log("No README.md found");
+                  this.contentEditable.innerHTML = "";
+                }
+                return;
+              }
+              this.contentEditable.innerHTML = event.target.result.value;
+            };
+            return;
+          }
+
+          // Handle regular pages
+          const transaction = this.db.transaction([this.storeName], "readonly");
+          const store = transaction.objectStore(this.storeName);
+          const request = store.get(hash);
+
+          request.onsuccess = (event) => {
+            const result = event.target.result;
+            this.contentEditable.innerHTML = result ? result.value : "";
           };
-          return;
         }
 
-        // Special case: #source
-        if (hash === "source") {
-          const response = await fetch(location.pathname);
-          const sourceCode = await response.text();
-          contentEditable.textContent = sourceCode;
-          return;
+        saveContent() {
+          const hash = location.hash.slice(1) || "home";
+
+          // Don't save special pages
+          if (["source", "reset"].includes(hash)) return;
+
+          const transaction = this.db.transaction(
+            [this.storeName],
+            "readwrite"
+          );
+          const store = transaction.objectStore(this.storeName);
+          store.put({
+            key: hash,
+            value: this.contentEditable.innerHTML,
+          });
         }
 
-        const transaction = db.transaction([storeName], "readonly");
-        const objectStore = transaction.objectStore(storeName);
-        const request = objectStore.get(hash);
-
-        request.onsuccess = function (event) {
-          const result = event.target.result;
-          contentEditable.innerHTML = result ? result.value : "";
-        };
+        async resetDB() {
+          return new Promise((resolve) => {
+            this.db.close();
+            const req = indexedDB.deleteDatabase(this.dbName);
+            req.onsuccess = () => {
+              this.initDB().then(resolve);
+            };
+          });
+        }
       }
 
-      // Save content with debouncing
-      let saveTimeout;
-      function saveContent() {
-        const hash = location.hash.slice(1) || "home";
-
-        // Don't save source or reset pages
-        if (["source", "reset"].includes(hash)) return;
-
-        const content = document.querySelector("[contenteditable]").innerHTML;
-
-        const transaction = db.transaction([storeName], "readwrite");
-        const objectStore = transaction.objectStore(storeName);
-        objectStore.put({ key: hash, value: content });
-      }
-
-      // Event listeners
-      document
-        .querySelector("[contenteditable]")
-        .addEventListener("input", () => {
-          clearTimeout(saveTimeout);
-          saveTimeout = setTimeout(saveContent, 3000);
-        });
-      window.addEventListener("hashchange", loadContent);
+      // Initialize the editor
+      const editor = new Editor();
     </script>
   </body>
 </html>
