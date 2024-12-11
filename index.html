@@ -51,7 +51,6 @@
           this.db = null;
           this.saveTimeout = null;
           this.$ = document.querySelector("main");
-          this.$.innerHTML = this.$.textContent;
 
           this.init();
           this.bindEvents();
@@ -96,15 +95,17 @@
         }
 
         executeScripts(element) {
-          const scripts = element.querySelectorAll("script");
-          scripts.forEach((oldScript) => {
-            const newScript = document.createElement("script");
-            Array.from(oldScript.attributes).forEach((attr) => {
-              newScript.setAttribute(attr.name, attr.value);
+          const content = element.textContent;
+          const scriptRegex = /<script\b[^>]*>([\s\S]*?)<\/script>/gm;
+          const matches = content.match(scriptRegex);
+
+          if (matches) {
+            matches.forEach((script) => {
+              const code = script.replace(/<script\b[^>]*>|<\/script>/g, "");
+              // Using eval in a sandbox environment
+              eval(code);
             });
-            newScript.textContent = oldScript.textContent;
-            oldScript.parentNode.replaceChild(newScript, oldScript);
-          });
+          }
         }
 
         async loadReadme() {
@@ -188,8 +189,13 @@ This is a URL-based universal interface, where everything after the #hash in the
 
         saveContent() {
           const hash = location.hash.slice(1) || "home";
-
           if (["source", "reset"].includes(hash)) return;
+
+          // Normalize newlines before saving
+          const content = this.$.innerHTML
+            .replace(/<div>/g, "\n")
+            .replace(/<\/div>/g, "")
+            .replace(/<br\s*\/?>/g, "\n");
 
           const transaction = this.db.transaction(
             [this.storeName],
@@ -198,7 +204,7 @@ This is a URL-based universal interface, where everything after the #hash in the
           const store = transaction.objectStore(this.storeName);
           store.put({
             key: hash,
-            value: this.$.innerHTML,
+            value: content,
           });
         }
 
