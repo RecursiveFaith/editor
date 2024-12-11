@@ -1,234 +1,229 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Universal Editor</title>
+    <title>Hashed Wiki</title>
     <style>
       :root {
         --pad: 1em;
-        color-scheme: light dark;
-        --bg: #ffffff;
-        --fg: #000000;
+        color-scheme: light dark
       }
 
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #1a1a1a;
-          --fg: #ffffff;
-        }
-      }
+      * { box-sizing: border-box }
 
-      * {
-        box-sizing: border-box;
-      }
-
-      html,
-      body,
-      main {
+      html, body, main {
         width: 100%;
         height: 100%;
-        margin: 0;
-        background: var(--bg);
-        color: var(--fg);
+        margin: 0
+      }
+
+      body {
+        overflow: hidden
       }
 
       main {
+        display: flex;
+        height: 100%
+      }
+
+      textarea {
+        width: 50%;
+        height: 100%;
+        margin: 0;
         padding: var(--pad);
-        overflow: auto;
-        outline: none;
-        font-family: system-ui, -apple-system, sans-serif;
-        line-height: 1.5;
+        font-family: monospace;
         white-space: pre-wrap;
+        outline: none;
+        border: none;
+        resize: none
+      }
+
+      iframe {
+        width: 50%;
+        height: 100%;
+        border: none
       }
     </style>
   </head>
   <body>
-    <main contenteditable></main>
+    <main>
+      <textarea spellcheck="false"></textarea>
+      <iframe></iframe>
+    </main>
     <script>
       class Editor {
         constructor() {
-          this.dbName = "uris";
-          this.storeName = "uri";
-          this.db = null;
-          this.saveTimeout = null;
-          this.$ = document.querySelector("main");
+          this.dbName = 'uris'
+          this.storeName = 'uri'
+          this.db = null
+          this.saveTimeout = null
+          this.editor = document.querySelector('textarea')
+          this.preview = document.querySelector('iframe')
+          this.hooks = {
+            beforeSave: [],
+            afterSave: [],
+            beforeLoad: [],
+            afterLoad: []
+          }
 
-          this.init();
-          this.bindEvents();
+          this.init()
         }
 
         async init() {
-          await this.initDB();
+          await this.initDB()
+          this.bindEvents()
+          
           if (!location.hash) {
-            location.hash = "home";
+            location.hash = 'home'
+          } else {
+            await this.loadContent()
           }
-          this.loadContent();
+          
+          this.editor.focus()
         }
 
         initDB() {
           return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, 1);
-
+            const request = indexedDB.open(this.dbName, 1)
             request.onupgradeneeded = (event) => {
-              this.db = event.target.result;
-              this.db.createObjectStore(this.storeName, { keyPath: "key" });
-            };
-
+              this.db = event.target.result
+              this.db.createObjectStore(this.storeName, { keyPath: 'key' })
+            }
             request.onsuccess = (event) => {
-              this.db = event.target.result;
-              resolve();
-            };
-
+              this.db = event.target.result
+              resolve()
+            }
             request.onerror = (event) => {
-              console.error("Database error:", event.target.errorCode);
-              reject(event.target.errorCode);
-            };
-          });
+              console.error('Database error:', event.target.errorCode)
+              reject(event.target.errorCode)
+            }
+          })
         }
 
         bindEvents() {
-          this.$.addEventListener("input", () => {
-            clearTimeout(this.saveTimeout);
-            this.saveTimeout = setTimeout(() => this.saveContent(), 1000);
-          });
+          this.editor.addEventListener('input', () => {
+            clearTimeout(this.saveTimeout)
+            this.saveTimeout = setTimeout(() => this.saveContent(), 1000)
+            this.updatePreview()
+          })
 
-          window.addEventListener("hashchange", () => this.loadContent());
+          window.addEventListener('hashchange', () => this.loadContent())
         }
 
-        executeScripts(element) {
-          const content = element.textContent;
-          const scriptRegex = /<script\b[^>]*>([\s\S]*?)<\/script>/gm;
-          const matches = content.match(scriptRegex);
-
-          if (matches) {
-            matches.forEach((script) => {
-              const code = script.replace(/<script\b[^>]*>|<\/script>/g, "");
-              // Using eval in a sandbox environment
-              eval(code);
-            });
-          }
+        updatePreview() {
+          const doc = this.preview.contentDocument
+          doc.open()
+          doc.write(this.editor.value)
+          doc.close()
+          this.executeScripts(doc)
         }
 
-        async loadReadme() {
-          try {
-            // Try to fetch README.md from the same directory
-            const response = await fetch("README.md");
-            if (!response.ok) throw new Error("README not found");
-            return await response.text();
-          } catch (error) {
-            // Fallback content if fetch fails
-            return `<h1>Welcome to your Universal Interface</h1>
-	
-This is a URL-based universal interface, where everything after the #hash in the URL points to a unique in-memory HTML page, stored in the <code>page</code> table of the <code>pages</code> IndexedDB database in your browser. This data is cleared automatically if you are in your browser's Private/Incognito Mode or whenever you manually clear your browser's cache
+        executeScripts(doc) {
+          const scripts = doc.getElementsByTagName('script')
+          Array.from(scripts).forEach(oldScript => {
+            const newScript = doc.createElement('script')
+            Array.from(oldScript.attributes).forEach(attr => {
+              newScript.setAttribute(attr.name, attr.value)
+            })
+            newScript.textContent = oldScript.textContent
+            oldScript.parentNode.replaceChild(newScript, oldScript)
+          })
+        }
 
-<h2>Usage</h2>
-- Use <a href="#home">#home</a> to access the main page
-- Use <a href="#reset">#reset</a> to clear all data
-- Use <a href="#source">#source</a> to view source code
-- Use any other #hash to create/edit new pages`;
-          }
+        getDefaultContent() {
+          return `Welcome to your Universal Interface
+
+This is a URL-based universal interface, where everything after the #hash in the URL points to a unique page.
+
+Usage:
+- Use #home to access the main page
+- Use #reset to clear all data
+- Use #source to view source code
+- Use any other #hash to create/edit new pages`
         }
 
         async loadContent() {
-          const hash = location.hash.slice(1) || "home";
-
-          // Handle #reset
-          if (hash === "reset") {
-            await this.resetDB();
-            location.hash = "home";
-            return;
+          const hash = location.hash.slice(1) || 'home'
+          
+          for (const hook of this.hooks.beforeLoad) {
+            await hook(hash)
           }
 
-          // Handle #source
-          if (hash === "source") {
-            const response = await fetch(location.pathname);
-            const sourceCode = await response.text();
-            this.$.textContent = sourceCode;
-            return;
+          if (hash === 'reset') {
+            await this.resetDB()
+            location.hash = 'home'
+            return
           }
 
-          // Handle #home when empty
-          if (hash === "home") {
-            const transaction = this.db.transaction(
-              [this.storeName],
-              "readonly"
-            );
-            const store = transaction.objectStore(this.storeName);
-            const request = store.get(hash);
-
-            request.onsuccess = async (event) => {
-              if (!event.target.result) {
-                try {
-                  const readme = await this.loadReadme();
-                  this.$.innerHTML = readme;
-                  this.saveContent();
-                } catch (e) {
-                  console.log("No README loaded");
-                  this.$.innerHTML = "";
-                }
-                return;
-              }
-              this.$.innerHTML = event.target.result.value;
-              this.executeScripts(this.$);
-            };
-            return;
+          if (hash === 'source') {
+            const response = await fetch(location.pathname)
+            const sourceCode = await response.text()
+            this.editor.value = sourceCode
+            this.updatePreview()
+            return
           }
 
-          // Handle regular pages
-          const transaction = this.db.transaction([this.storeName], "readonly");
-          const store = transaction.objectStore(this.storeName);
-          const request = store.get(hash);
+          const transaction = this.db.transaction([this.storeName], 'readonly')
+          const store = transaction.objectStore(this.storeName)
+          const request = store.get(hash)
 
-          request.onsuccess = (event) => {
-            const result = event.target.result;
-            this.$.innerHTML = result ? result.value : "";
-            if (result) {
-              this.executeScripts(this.$);
+          request.onsuccess = async (event) => {
+            const result = event.target.result
+            
+            if (!result && hash === 'home') {
+              this.editor.value = this.getDefaultContent()
+              await this.saveContent()
+            } else {
+              this.editor.value = result ? result.value : ''
             }
-          };
+            
+            this.updatePreview()
+            
+            for (const hook of this.hooks.afterLoad) {
+              await hook(hash)
+            }
+          }
         }
 
-        saveContent() {
-          const hash = location.hash.slice(1) || "home";
-          if (["source", "reset"].includes(hash)) return;
+        async saveContent() {
+          const hash = location.hash.slice(1) || 'home'
+          if (['source', 'reset'].includes(hash)) return
 
-          // Normalize newlines before saving
-          const content = this.$.innerHTML
-            .replace(/<div>/g, "\n")
-            .replace(/<\/div>/g, "")
-            .replace(/<br\s*\/?>/g, "\n");
+          for (const hook of this.hooks.beforeSave) {
+            await hook(hash, this.editor.value)
+          }
 
-          const transaction = this.db.transaction(
-            [this.storeName],
-            "readwrite"
-          );
-          const store = transaction.objectStore(this.storeName);
-          store.put({
+          const transaction = this.db.transaction([this.storeName], 'readwrite')
+          const store = transaction.objectStore(this.storeName)
+          await store.put({
             key: hash,
-            value: content,
-          });
+            value: this.editor.value
+          })
+
+          for (const hook of this.hooks.afterSave) {
+            await hook(hash, this.editor.value)
+          }
         }
 
         async resetDB() {
           const confirmReset = confirm(
-            "Are you sure you want to reset all data? This action cannot be undone."
-          );
+            'Are you sure you want to reset all data? This action cannot be undone.'
+          )
           if (!confirmReset) {
-            location.hash = "home";
-            return;
+            location.hash = 'home'
+            return
           }
 
           return new Promise((resolve) => {
-            this.db.close();
-            const req = indexedDB.deleteDatabase(this.dbName);
+            this.db.close()
+            const req = indexedDB.deleteDatabase(this.dbName)
             req.onsuccess = () => {
-              this.initDB().then(resolve);
-            };
-          });
+              this.initDB().then(resolve)
+            }
+          })
         }
       }
 
-      // Initialize the editor
-      const editor = new Editor();
+      new Editor
     </script>
   </body>
 </html>
