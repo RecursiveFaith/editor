@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+  <style>
+    :root {
+      --pad: 1em;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    html,
+    body,
+    body > [contenteditable] {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: var(--pad);
+    }
+    [contenteditable] {
+      overflow: auto;
+    }
+  </style>
+  <body>
+    <div contenteditable style="height: 100%; width: 100%"></div>
+    <script>
+      const dbName = "uris";
+      const storeName = "uri";
+      let db;
+
+      // Initialize IndexedDB
+      const request = indexedDB.open(dbName, 1);
+      request.onupgradeneeded = function (event) {
+        db = event.target.result;
+        const objectStore = db.createObjectStore(storeName, { keyPath: "key" });
+      };
+      request.onsuccess = function (event) {
+        db = event.target.result;
+        if (!location.hash) {
+          location.hash = "home";
+        }
+        loadContent();
+      };
+      request.onerror = function (event) {
+        console.error("Database error:", event.target.errorCode);
+      };
+
+      // Handle special cases and content loading
+      async function loadContent() {
+        const hash = location.hash.slice(1) || "home";
+        const contentEditable = document.querySelector("[contenteditable]");
+
+        // Special case: #reset
+        if (hash === "reset") {
+          const req = indexedDB.deleteDatabase(dbName);
+          req.onsuccess = () => {
+            location.hash = "home";
+            location.reload();
+          };
+          return;
+        }
+
+        // Special case: #source
+        if (hash === "source") {
+          const response = await fetch(location.pathname);
+          const sourceCode = await response.text();
+          contentEditable.textContent = sourceCode;
+          return;
+        }
+
+        const transaction = db.transaction([storeName], "readonly");
+        const objectStore = transaction.objectStore(storeName);
+        const request = objectStore.get(hash);
+
+        request.onsuccess = function (event) {
+          const result = event.target.result;
+          contentEditable.innerHTML = result ? result.value : "";
+        };
+      }
+
+      // Save content with debouncing
+      let saveTimeout;
+      function saveContent() {
+        const hash = location.hash.slice(1) || "home";
+
+        // Don't save source or reset pages
+        if (["source", "reset"].includes(hash)) return;
+
+        const content = document.querySelector("[contenteditable]").innerHTML;
+
+        const transaction = db.transaction([storeName], "readwrite");
+        const objectStore = transaction.objectStore(storeName);
+        objectStore.put({ key: hash, value: content });
+      }
+
+      // Event listeners
+      document
+        .querySelector("[contenteditable]")
+        .addEventListener("input", () => {
+          clearTimeout(saveTimeout);
+          saveTimeout = setTimeout(saveContent, 3000);
+        });
+      window.addEventListener("hashchange", loadContent);
+    </script>
+  </body>
+</html>
