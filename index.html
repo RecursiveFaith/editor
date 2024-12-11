@@ -31,9 +31,7 @@
         color: var(--fg);
       }
 
-      [contenteditable] {
-        width: 100%;
-        height: 100%;
+      main {
         padding: var(--pad);
         overflow: auto;
         outline: none;
@@ -44,7 +42,7 @@
     </style>
   </head>
   <body>
-    <div contenteditable></div>
+    <main contenteditable></main>
     <script>
       class Editor {
         constructor() {
@@ -52,8 +50,8 @@
           this.storeName = "uri";
           this.db = null;
           this.saveTimeout = null;
-          this.contentEditable = document.querySelector("[contenteditable]");
-          this.contentEditable.innerHTML = this.contentEditable.textContent;
+          this.$ = document.querySelector("main");
+          this.$.innerHTML = this.$.textContent;
 
           this.init();
           this.bindEvents();
@@ -89,7 +87,7 @@
         }
 
         bindEvents() {
-          this.contentEditable.addEventListener("input", () => {
+          this.$.addEventListener("input", () => {
             clearTimeout(this.saveTimeout);
             this.saveTimeout = setTimeout(() => this.saveContent(), 1000);
           });
@@ -143,7 +141,7 @@ This is a URL-based universal interface, where everything after the #hash in the
           if (hash === "source") {
             const response = await fetch(location.pathname);
             const sourceCode = await response.text();
-            this.contentEditable.textContent = sourceCode;
+            this.$.textContent = sourceCode;
             return;
           }
 
@@ -160,16 +158,16 @@ This is a URL-based universal interface, where everything after the #hash in the
               if (!event.target.result) {
                 try {
                   const readme = await this.loadReadme();
-                  this.contentEditable.innerHTML = readme;
+                  this.$.innerHTML = readme;
                   this.saveContent();
                 } catch (e) {
                   console.log("No README loaded");
-                  this.contentEditable.innerHTML = "";
+                  this.$.innerHTML = "";
                 }
                 return;
               }
-              this.contentEditable.innerHTML = event.target.result.value;
-              this.executeScripts(this.contentEditable);
+              this.$.innerHTML = event.target.result.value;
+              this.executeScripts(this.$);
             };
             return;
           }
@@ -181,9 +179,9 @@ This is a URL-based universal interface, where everything after the #hash in the
 
           request.onsuccess = (event) => {
             const result = event.target.result;
-            this.contentEditable.innerHTML = result ? result.value : "";
+            this.$.innerHTML = result ? result.value : "";
             if (result) {
-              this.executeScripts(this.contentEditable);
+              this.executeScripts(this.$);
             }
           };
         }
@@ -200,7 +198,7 @@ This is a URL-based universal interface, where everything after the #hash in the
           const store = transaction.objectStore(this.storeName);
           store.put({
             key: hash,
-            value: this.contentEditable.innerHTML,
+            value: this.$.innerHTML,
           });
         }
 
