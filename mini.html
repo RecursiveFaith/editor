@@ -25,19 +25,13 @@
           this.db = null
           this.$ = document.querySelector("textarea")
           this.$$ = document.querySelector("iframe")
-          this.hooks = {
-            beforeSave: [],
-            afterSave: [],
-            beforeLoad: [],
-            afterLoad: [],
-          }
           this.init()
         }
 
         async init() {
           await this.initDB()
           this.bindEvents()
-          if (!location.hash) {location.hash = "home"} else {await this.loadContent()}
+          if (!location.hash) {location.hash = "home"} else {await this.load()}
           this.$.focus()
         }
 
@@ -62,44 +56,37 @@
         bindEvents() {
           this.$.addEventListener("input", () => {
             clearTimeout(this.saveTimeout)
-            this.saveTimeout = setTimeout(() => this.saveContent(), 250)
+            this.saveTimeout = setTimeout(() => this.save(), 250)
           })
-          window.addEventListener("hashchange", () => this.loadContent())
+          window.addEventListener("hashchange", () => this.load())
         }
 
-        updatePreview() {
+        update() {
           const doc = this.$$.contentDocument
           doc.open()
           doc.write("<style>:root {color-scheme: light dark; white-space: pre-wrap;} * {box-sizing: border-box;}</style>" + this.$.value)
           doc.close()
         }
 
-        async loadContent() {
+        async load() {
           const hash = location.hash.slice(1) || "home"
-          for (const hook of this.hooks.beforeLoad) { await hook(hash) }
-
-          const trans = this.db.transaction([this.store], "readonly")
-          const store = trans.objectStore(this.store)
-          const req = store.get(hash)
-
-          req.onsuccess = async (event) => {
-            const res = event.target.result
-            this.$.value = res ? res.value : ""
-            this.updatePreview()
-            for (const hook of this.hooks.afterLoad) { await hook(hash) }
-          }
+          this.db
+	    .transaction([this.store], "readonly")
+	    .objectStore(this.store)
+	    .get(hash).onsuccess = async (event) => {
+              const res = event.target.result
+              this.$.value = res ? res.value : ""
+              this.update()
+            }
         }
 
-        async saveContent() {
-          const hash = location.hash.slice(1) || "home"
-          if (["source", "reset"].includes(hash)) return
-          for (const hook of this.hooks.beforeSave) {await hook(hash, this.$.value)}
-
-          const trans = this.db.transaction([this.store], "readwrite")
-          const store = trans.objectStore(this.store)
-          await store.put({key: hash, value: this.$.value})
-
-          for (const hook of this.hooks.afterSave) {await hook(hash, this.$.value)}
+        async save() {
+          const key = location.hash.slice(1) || "home"
+          if (["source", "reset"].includes(key)) return
+          await this.db
+	    .transaction([this.store], "readwrite")
+	    .objectStore(this.store)
+	    .put({key, value: this.$.value})
         } 
       }
 
