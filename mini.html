@@ -18,14 +18,13 @@
       <iframe></iframe>
     </main>
     <script>
-      let $ = document.querySelector	    
       class Editor {
-        constructor() {
-          this.dbName = "uris"
-          this.storeName = "uri"
+        constructor(name="uri") {
+	  this.name = name + "s"
+          this.store = name
           this.db = null
-          this.$ = $("textarea")
-          this.$$ = $("iframe")
+          this.$ = document.querySelector("textarea")
+          this.$$ = document.querySelector("iframe")
           this.hooks = {
             beforeSave: [],
             afterSave: [],
@@ -44,17 +43,17 @@
 
         initDB() {
           return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, 2)
-            request.onupgradeneeded = (event) => {
+            const req = indexedDB.open(this.name, 2)
+            req.onupgradeneeded = (event) => {
               this.db = event.target.result
-              this.db.createObjectStore(this.storeName, { keyPath: "key" })
+              this.db.createObjectStore(this.store, { keyPath: "key" })
             }
-            request.onsuccess = (event) => {
+            req.onsuccess = (event) => {
               this.db = event.target.result
               resolve()
             }
-            request.onerror = (event) => {
-              console.error("Database error:", event.target.errorCode)
+            req.onerror = (event) => {
+              console.error("DB ERROR:", event.target.errorCode)
               reject(event.target.errorCode)
             }
           })
@@ -79,13 +78,13 @@
           const hash = location.hash.slice(1) || "home"
           for (const hook of this.hooks.beforeLoad) { await hook(hash) }
 
-          const transaction = this.db.transaction([this.storeName], "readonly")
-          const store = transaction.objectStore(this.storeName)
-          const request = store.get(hash)
+          const trans = this.db.transaction([this.store], "readonly")
+          const store = trans.objectStore(this.store)
+          const req = store.get(hash)
 
-          request.onsuccess = async (event) => {
-            const result = event.target.result
-            this.$.value = result ? result.value : ""
+          req.onsuccess = async (event) => {
+            const res = event.target.result
+            this.$.value = res ? res.value : ""
             this.updatePreview()
             for (const hook of this.hooks.afterLoad) { await hook(hash) }
           }
@@ -94,21 +93,13 @@
         async saveContent() {
           const hash = location.hash.slice(1) || "home"
           if (["source", "reset"].includes(hash)) return
+          for (const hook of this.hooks.beforeSave) {await hook(hash, this.$.value)}
 
-          for (const hook of this.hooks.beforeSave) {
-            await hook(hash, this.$.value)
-          }
+          const trans = this.db.transaction([this.store], "readwrite")
+          const store = trans.objectStore(this.store)
+          await store.put({key: hash, value: this.$.value})
 
-          const transaction = this.db.transaction([this.storeName], "readwrite")
-          const store = transaction.objectStore(this.storeName)
-          await store.put({
-            key: hash,
-            value: this.$.value,
-          })
-
-          for (const hook of this.hooks.afterSave) {
-            await hook(hash, this.$.value)
-          }
+          for (const hook of this.hooks.afterSave) {await hook(hash, this.$.value)}
         } 
       }
 
