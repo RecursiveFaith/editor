@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>hashed.wiki</title>
+    <style>
+      :root {color-scheme: light dark}
+      * {box-sizing: border-box}
+      body {overflow: hidden}
+      main {display: flex}
+      iframe {flex: 1}
+      html,body,main {width: 100%; height: 100%; margin: 0}
+      textarea {flex: 1; font-family: monospace; white-space: pre-wrap}
+    </style>
+  </head>
+  <body>
+    <main>
+      <textarea></textarea>
+      <iframe></iframe>
+    </main>
+    <script>
+      class Editor {
+        constructor() {
+          this.dbName = "uris"
+          this.storeName = "uri"
+          this.db = null
+          this.$ = document.querySelector("textarea")
+          this.preview = document.querySelector("iframe")
+          this.hooks = {
+            beforeSave: [],
+            afterSave: [],
+            beforeLoad: [],
+            afterLoad: [],
+          }
+          this.init()
+        }
+
+        async init() {
+          await this.initDB()
+          this.bindEvents()
+
+          if (!location.hash) {
+            location.hash = "home"
+          } else {
+            await this.loadContent()
+          }
+
+          this.$.focus()
+        }
+
+        initDB() {
+          return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, 1)
+            request.onupgradeneeded = (event) => {
+              this.db = event.target.result
+              this.db.createObjectStore(this.storeName, { keyPath: "key" })
+            }
+            request.onsuccess = (event) => {
+              this.db = event.target.result
+              resolve()
+            }
+            request.onerror = (event) => {
+              console.error("Database error:", event.target.errorCode)
+              reject(event.target.errorCode)
+            }
+          })
+        }
+
+        bindEvents() {
+          this.$.addEventListener("input", () => {
+            clearTimeout(this.saveTimeout)
+            this.saveTimeout = setTimeout(() => this.saveContent(), 250)
+          })
+          window.addEventListener("hashchange", () => this.loadContent())
+        }
+
+        updatePreview() {
+          const doc = this.preview.contentDocument
+          doc.open()
+          doc.write("<style>:root {color-scheme: light dark; white-space: pre-wrap;} * {box-sizing: border-box;}</style>" + this.$.value)
+          doc.close()
+        }
+
+        async loadContent() {
+          const hash = location.hash.slice(1) || "home"
+          for (const hook of this.hooks.beforeLoad) { await hook(hash) }
+
+          const transaction = this.db.transaction([this.storeName], "readonly")
+          const store = transaction.objectStore(this.storeName)
+          const request = store.get(hash)
+
+          request.onsuccess = async (event) => {
+            const result = event.target.result
+            this.$.value = result ? result.value : ""
+            this.updatePreview()
+            for (const hook of this.hooks.afterLoad) { await hook(hash) }
+          }
+        }
+
+        async saveContent() {
+          const hash = location.hash.slice(1) || "home"
+          if (["source", "reset"].includes(hash)) return
+
+          for (const hook of this.hooks.beforeSave) {
+            await hook(hash, this.$.value)
+          }
+
+          const transaction = this.db.transaction([this.storeName], "readwrite")
+          const store = transaction.objectStore(this.storeName)
+          await store.put({
+            key: hash,
+            value: this.$.value,
+          })
+
+          for (const hook of this.hooks.afterSave) {
+            await hook(hash, this.$.value)
+          }
+        } 
+      }
+
+      new Editor()
+    </script>
+  </body>
+</html>
+
