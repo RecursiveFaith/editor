@@ -1,220 +1,104 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Hashed Wiki</title>
+    <!-- by oz 24.12.14 -->
+    <title>editor</title>
     <style>
-      :root {
-        --pad: 1em;
-        color-scheme: light dark;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      html,
-      body,
-      main {
-        width: 100%;
-        height: 100%;
-        margin: 0;
-      }
-
-      body {
-        overflow: hidden;
-      }
-
-      main {
-        display: flex;
-        height: 100%;
-      }
-
-      textarea {
-        margin: 0;
-        flex: 1;
-        padding: var(--pad);
-        font-family: monospace;
-        white-space: pre-wrap;
-        outline: none;
-        border: none;
-        resize: none;
-      }
-
-      iframe {
-        flex: 1;
-        border: none;
-      }
+      :root {color-scheme: light dark}
+      * {box-sizing: border-box}
+      body {overflow: hidden}
+      main {display: flex; flex-direction: column}
+      iframe {flex: 2}
+      html,body,main {width: 101%; height: 100%; margin: 0}
+      textarea {flex: 2; font-family: monospace; white-space: pre-wrap}
     </style>
   </head>
   <body>
     <main>
-      <textarea spellcheck="false"></textarea>
       <iframe></iframe>
+      <textarea></textarea>
     </main>
     <script>
       class Editor {
-        constructor() {
-          this.dbName = "uris"
-          this.storeName = "uri"
-          this.db = null
-          this.saveTimeout = null
-          this.editor = document.querySelector("textarea")
-          this.preview = document.querySelector("iframe")
-          this.hooks = {
-            beforeSave: [],
-            afterSave: [],
-            beforeLoad: [],
-            afterLoad: [],
-          }
-
+        constructor(name="uri") {
+	  this.name = name + "s"
+          this.store = name
+          this.$ = document.querySelector("textarea")
+          this.$$ = document.querySelector("iframe")
           this.init()
         }
 
         async init() {
           await this.initDB()
           this.bindEvents()
-
-          if (!location.hash) {
-            location.hash = "home"
-          } else {
-            await this.loadContent()
-          }
-
-          this.editor.focus()
+          if (!location.hash) location.hash = "home"
+          await this.load()
+          this.$.focus()
         }
 
         initDB() {
           return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, 1)
-            request.onupgradeneeded = (event) => {
-              this.db = event.target.result
-              this.db.createObjectStore(this.storeName, { keyPath: "key" })
+            const req = indexedDB.open(this.name, 2)
+            req.onupgradeneeded = ev => {
+              this.db = ev.target.result
+              this.db.createObjectStore(this.store, { keyPath: "key" })
             }
-            request.onsuccess = (event) => {
-              this.db = event.target.result
+            req.onsuccess = ev => {
+              this.db = ev.target.result
               resolve()
             }
-            request.onerror = (event) => {
-              console.error("Database error:", event.target.errorCode)
-              reject(event.target.errorCode)
+            req.onerror = ev => {
+              console.error("DB ERROR:", ev.target.errorCode)
+              reject(ev.target.errorCode)
             }
           })
         }
 
         bindEvents() {
-          this.editor.addEventListener("input", () => {
+          this.$.addEventListener("input", () => {
             clearTimeout(this.saveTimeout)
-            this.saveTimeout = setTimeout(() => this.saveContent(), 1000)
+            this.saveTimeout = setTimeout(() => this.save(), 250)
           })
-
-          window.addEventListener("hashchange", () => this.loadContent())
+          window.addEventListener("hashchange", () => this.load())
         }
 
-        updatePreview() {
-          const doc = this.preview.contentDocument
+        update(code = "") {
+          const doc = this.$$.contentDocument
+	  if (!doc) return
           doc.open()
-          doc.write(
-            "<style>:root {color-scheme: light dark; white-space: pre-wrap;} * {box-sizing: border-box;}</style>" +
-              this.editor.value
-          )
+          doc.write("<style>:root {color-scheme: light dark; white-space: pre-wrap;} * {box-sizing: border-box;}</style>" + code)
           doc.close()
         }
 
-        getDefaultContent() {
-          return `Welcome to your Universal Interface
-
-This is a URL-based universal interface, where everything after the #hash in the URL points to a unique page.
-
-Usage:
-- Use #home to access the main page
-- Use #reset to clear all data
-- Use #source to view source code
-- Use any other #hash to create/edit new pages`
-        }
-
-        async loadContent() {
+        async load() {
           const hash = location.hash.slice(1) || "home"
+	  const store = this.db
+	    .transaction([this.store], "readonly")
+	    .objectStore(this.store)
 
-          for (const hook of this.hooks.beforeLoad) {
-            await hook(hash)
-          }
-
-          if (hash === "reset") {
-            await this.resetDB()
-            location.hash = "home"
-            return
-          }
-
-          if (hash === "source") {
-            const response = await fetch(location.pathname)
-            const sourceCode = await response.text()
-            this.editor.value = sourceCode
-            this.updatePreview()
-            return
-          }
-
-          const transaction = this.db.transaction([this.storeName], "readonly")
-          const store = transaction.objectStore(this.storeName)
-          const request = store.get(hash)
-
-          request.onsuccess = async (event) => {
-            const result = event.target.result
-
-            if (!result && hash === "home") {
-              this.editor.value = this.getDefaultContent()
-              await this.saveContent()
-            } else {
-              this.editor.value = result ? result.value : ""
-            }
-
-            this.updatePreview()
-
-            for (const hook of this.hooks.afterLoad) {
-              await hook(hash)
-            }
+	  store.get(hash).onsuccess = async ev => {
+	    let val = ev.target.result?.value || ""
+	    const cb = async ev => {
+	      val += ev.target.result?.value || ""
+	      this.update(val)
+	    }
+	    store.get('boot').onsuccess = cb
+	    store.get('boot').onerror = cb
+	    ed.$.value = val
           }
         }
 
-        async saveContent() {
-          const hash = location.hash.slice(1) || "home"
-          if (["source", "reset"].includes(hash)) return
-
-          for (const hook of this.hooks.beforeSave) {
-            await hook(hash, this.editor.value)
-          }
-
-          const transaction = this.db.transaction([this.storeName], "readwrite")
-          const store = transaction.objectStore(this.storeName)
-          await store.put({
-            key: hash,
-            value: this.editor.value,
-          })
-
-          for (const hook of this.hooks.afterSave) {
-            await hook(hash, this.editor.value)
-          }
-        }
-
-        async resetDB() {
-          const confirmReset = confirm(
-            "Are you sure you want to reset all data? This action cannot be undone."
-          )
-          if (!confirmReset) {
-            location.hash = "home"
-            return
-          }
-
-          return new Promise((resolve) => {
-            this.db.close()
-            const req = indexedDB.deleteDatabase(this.dbName)
-            req.onsuccess = () => {
-              this.initDB().then(resolve)
-            }
-          })
-        }
+        async save() {
+          const key = location.hash.slice(1) || "home"
+          if (["source", "reset"].includes(key)) return
+          await this.db
+	    .transaction([this.store], "readwrite")
+	    .objectStore(this.store)
+	    .put({key, value: this.$.value})
+        } 
       }
 
-      new Editor()
+      ed = new Editor()
     </script>
   </body>
 </html>
