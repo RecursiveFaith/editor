@@ -21,33 +21,32 @@
 <table>
   <thead>
     <tr>
-      <th>
-        <h4>Uncompressed</h4>
-      </th>
-      <th>
-        <h4>Compressed</h4>
-      </th>
+      <th colspan=2>index.html</th>
+    </tr>
+    <tr>
+      <th>Uncompressed</th>
+      <th>Compressed</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td>
-        <div>QR Code version = 39</div>
-        <div>character count = 2800</div>
-        <div>data bits = 22420</div>
+        <div>QR Code version = 40</div>
+        <div>character count = 2948</div>
+        <div>data bits = 23604</div>
       </td>
       <td>
-        <div>QR Code version = 33</div>
-        <div>character count = 2061</div>
-        <div>data bits = 16508</div>
+        <div>QR Code version = 31</div>
+        <div>character count = 1810</div>
+        <div>data bits = 14500</div>
       </td>
     </tr>
     <tr>
       <td>
-        <img src="https://github.com/user-attachments/assets/ee7698f1-fa34-4692-b6f9-5a3d75e3d227" width=362>
+        <img src="https://github.com/user-attachments/assets/baba5c81-8e2c-474b-8085-434083daa83e" width=370>
       </td>
       <td>
-        <img src="https://github.com/user-attachments/assets/134eb4a5-a8d7-45e5-827d-70228cab73e1" width=314>
+        <img src="https://github.com/user-attachments/assets/c19bfe85-2ba0-4eac-b3ff-f90c42dbccbd" width=298>
       </td> 
     </tr>    
   </tbody>
