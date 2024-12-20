@@ -62,7 +62,7 @@
           window.addEventListener("hashchange", () => this.load())
         }
 
-        update(code = "") {
+        update(code="") {
           const doc = this.$$.contentDocument
 	  if (!doc) return
           doc.open()
@@ -76,14 +76,14 @@
 	    .transaction([this.store], "readonly")
 	    .objectStore(this.store)
 
-	  store.get(hash).onsuccess = async ev => {
+	  store.get(hash).onsuccess = ev => {
 	    let val = ev.target.result?.value || ""
-	    const cb = async ev => {
+	    const cb = ev => {
+	      if (hash === 'boot') val = ""
 	      val += ev.target.result?.value || ""
 	      this.update(val)
 	    }
 	    store.get('boot').onsuccess = cb
-	    store.get('boot').onerror = cb
 	    ed.$.value = val
           }
         }
