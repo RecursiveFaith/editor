@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <!-- by oz 24.12.14 -->
     <title>editor</title>
     <style>
       :root {color-scheme: light dark}
@@ -21,10 +20,11 @@
     <script>
       class Editor {
         constructor(name="uri") {
-	  this.name = name + "s"
+          this.name = name + "s"
           this.store = name
           this.$ = document.querySelector("textarea")
           this.$$ = document.querySelector("iframe")
+          this.channel = new BroadcastChannel("editor-sync")
           this.init()
         }
 
@@ -47,10 +47,7 @@
               this.db = ev.target.result
               resolve()
             }
-            req.onerror = ev => {
-              console.error("DB ERROR:", ev.target.errorCode)
-              reject(ev.target.errorCode)
-            }
+            req.onerror = ev => reject(ev.target.errorCode)
           })
         }
 
@@ -60,11 +57,19 @@
             this.saveTimeout = setTimeout(() => this.save(), 250)
           })
           window.addEventListener("hashchange", () => this.load())
+          this.channel.onmessage = ev => {
+            const { key, value } = ev.data
+            const currentKey = location.hash.slice(1) || "home"
+            if (key === currentKey && this.$.value !== value) {
+              this.$.value = value
+            }
+          }
+          window.addEventListener("beforeunload", () => this.channel.close())
         }
 
         update(code="") {
           const doc = this.$$.contentDocument
-	  if (!doc) return
+          if (!doc) return
           doc.open()
           doc.write("<style>:root {color-scheme: light dark; white-space: pre-wrap;} * {box-sizing: border-box;}</style>" + code)
           doc.close()
@@ -72,33 +77,30 @@
 
         async load() {
           const hash = location.hash.slice(1) || "home"
-	  const store = this.db
-	    .transaction([this.store], "readonly")
-	    .objectStore(this.store)
-
-	  store.get(hash).onsuccess = ev => {
-	    let val = ev.target.result?.value || ""
-	    const cb = ev => {
-	      if (hash === 'boot') val = ""
-	      val += ev.target.result?.value || ""
-	      this.update(val)
-	    }
-	    store.get('boot').onsuccess = cb
-	    ed.$.value = val
+          const store = this.db.transaction([this.store], "readonly").objectStore(this.store)
+          store.get(hash).onsuccess = ev => {
+            let val = ev.target.result?.value || ""
+            const cb = ev => {
+              if (hash === 'boot') val = ""
+              val += ev.target.result?.value || ""
+              this.update(val)
+            }
+            store.get('boot').onsuccess = cb
+            ed.$.value = val
           }
         }
 
         async save() {
           const key = location.hash.slice(1) || "home"
           if (["source", "reset"].includes(key)) return
-          await this.db
-	    .transaction([this.store], "readwrite")
-	    .objectStore(this.store)
-	    .put({key, value: this.$.value})
-        } 
+          const value = this.$.value
+          await this.db.transaction([this.store], "readwrite").objectStore(this.store).put({ key, value })
+          this.channel.postMessage({ key, value })
+        }
       }
 
       ed = new Editor()
     </script>
   </body>
 </html>
+
