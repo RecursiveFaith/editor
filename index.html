@@ -77,17 +77,21 @@
 
         async load() {
           const hash = location.hash.slice(1) || "home"
-          const store = this.db.transaction([this.store], "readonly").objectStore(this.store)
-          store.get(hash).onsuccess = ev => {
-            let val = ev.target.result?.value || ""
-            const cb = ev => {
-              if (hash === 'boot') val = ""
-              val += ev.target.result?.value || ""
-              this.update(val)
-            }
-            store.get('boot').onsuccess = cb
-            ed.$.value = val
-          }
+          const params = new URLSearchParams(location.search)
+          const importKeys = params.get('import')?.split(',') || []
+          
+	  const store = this.db.transaction([this.store], "readonly").objectStore(this.store)
+          const fetchContent = key => new Promise(resolve => {
+            store.get(key).onsuccess = ev => resolve(ev.target.result?.value || '')
+          })
+
+          const imports = await Promise.all(importKeys.map(fetchContent))
+
+          fetchContent(hash).then(currentContent => {
+            const combinedContent = [...imports, currentContent].join('\n')
+            this.update(combinedContent)
+            this.$.value = currentContent
+          })
         }
 
         async save() {
